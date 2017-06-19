@@ -22,6 +22,8 @@ package org.apache.usergrid.persistence.core.datastax;
 
 import org.apache.usergrid.persistence.core.CassandraFig;
 
+import java.util.Map;
+
 public interface TableDefinition {
 
     enum ACTION {
@@ -33,4 +35,6 @@ public interface TableDefinition {
     String getTableName();
 
     String getTableCQL( CassandraFig cassandraFig, ACTION tableAction ) throws Exception;
+
+    Map<String,String> getIndexCQLs(CassandraFig cassandraFig ) throws Exception;
 }

@@ -26,10 +26,7 @@ import org.apache.usergrid.persistence.core.CassandraFig;
 import org.apache.usergrid.persistence.core.datastax.TableDefinition;
 import org.apache.usergrid.persistence.core.util.StringUtils;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.StringJoiner;
+import java.util.*;
 
 import static org.apache.usergrid.persistence.core.datastax.CQLUtils.*;
 
@@ -52,6 +49,7 @@ public class TableDefinitionImpl implements TableDefinition {
     private final Map<String, Object> compression;
     private final String gcGraceSeconds;
     private final Map<String, String> clusteringOrder;
+    private final Collection<String> indexColumnKeys;
 
     static String CREATE_TABLE = "CREATE TABLE IF NOT EXISTS";
     static String ALTER_TABLE = "ALTER TABLE";
@@ -68,9 +66,9 @@ public class TableDefinitionImpl implements TableDefinition {
     static String COMMA = ",";
     static String PAREN_LEFT = "(";
     static String PAREN_RIGHT = ")";
+    static String CREATE_INDEX = "CREATE INDEX IF NOT EXISTS ON";
 
     static String COMPOSITE_TYPE = "'org.apache.cassandra.db.marshal.DynamicCompositeType(a=>org.apache.cassandra.db.marshal.AsciiType,A=>org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.AsciiType),b=>org.apache.cassandra.db.marshal.BytesType,B=>org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.BytesType),i=>org.apache.cassandra.db.marshal.IntegerType,I=>org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.IntegerType),l=>org.apache.cassandra.db.marshal.LongType,L=>org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.LongType),s=>org.apache.cassandra.db.marshal.UTF8Type,S=>org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.UTF8Type),t=>org.apache.cassandra.db.marshal.TimeUUIDType,T=>org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.TimeUUIDType),u=>org.apache.cassandra.db.marshal.UUIDType,U=>org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.UUIDType),x=>org.apache.cassandra.db.marshal.LexicalUUIDType,X=>org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.LexicalUUIDType))'";
-
 
     public TableDefinitionImpl(
         final String keyspace,
@@ -80,11 +78,34 @@ public class TableDefinitionImpl implements TableDefinition {
         final Map<String, DataType.Name> columns,
         final CacheOption cacheOption,
         final Map<String, String> clusteringOrder) {
+        this(keyspace, tableName, partitionKeys, columnKeys, columns, cacheOption, clusteringOrder, null);
+    }
+
+    public TableDefinitionImpl(
+        final String keyspace,
+        final String tableName,
+        final Collection<String> partitionKeys,
+        final Collection<String> columnKeys,
+        final Map<String, DataType.Name> columns,
+        final CacheOption cacheOption,
+        final Map<String, String> clusteringOrder,
+        final Collection<String> indexColumnKeys) {
 
         Preconditions.checkNotNull(tableName, "Table name cannot be null");
         Preconditions.checkNotNull(partitionKeys, "Primary Key(s) cannot be null");
         Preconditions.checkNotNull(columns, "Columns cannot be null");
         Preconditions.checkNotNull(cacheOption, "CacheOption cannot be null");
+
+        if (indexColumnKeys != null) {
+            for (String indexColumnKey : indexColumnKeys) {
+                Preconditions.checkArgument(!columnKeys.contains(indexColumnKey),
+                    "Index column key %s was not specified as a column key.", indexColumnKey);
+            }
+            this.indexColumnKeys = columnKeys;
+        } else {
+            // no secondary indexes
+            this.indexColumnKeys = null;
+        }
 
         this.keyspace = keyspace;
         this.tableName = tableName;
@@ -170,6 +191,24 @@ public class TableDefinitionImpl implements TableDefinition {
         return cql.toString();
     }
 
+    @Override
+    public Map<String,String> getIndexCQLs(CassandraFig cassandraFig) throws Exception {
+
+        Map<String,String> cqlStatementMap = new HashMap<>();
+
+        for (String indexColumnKey : indexColumnKeys) {
+            StringJoiner cql = new StringJoiner(" ");
+
+            cql.add(CREATE_INDEX);
+
+            cql.add(getTableName());
+            cql.add(PAREN_LEFT).add(indexColumnKey).add(PAREN_RIGHT);
+
+            cqlStatementMap.put(indexColumnKey, cql.toString());
+        }
+
+        return cqlStatementMap;
+    }
 
 
     public Collection<String> getPartitionKeys() {
@@ -178,6 +217,10 @@ public class TableDefinitionImpl implements TableDefinition {
 
     public Collection<String> getColumnKeys() {
         return columnKeys;
+    }
+
+    public Collection<String> getIndexColumnKeys() {
+        return indexColumnKeys;
     }
 
     public Map<String, DataType.Name> getColumns() {

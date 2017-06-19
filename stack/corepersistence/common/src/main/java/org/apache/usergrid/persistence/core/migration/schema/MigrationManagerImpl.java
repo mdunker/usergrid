@@ -103,8 +103,10 @@ public class MigrationManagerImpl implements MigrationManager {
                 if ( tables != null && !tables.isEmpty() ) {
                     for (TableDefinition tableDefinition : tables) {
 
-                        createTable(tableDefinition, forceCheckSchema);
-
+                        boolean created = createTable(tableDefinition, forceCheckSchema);
+                        if (created) {
+                            createSecondaryIndexes(tableDefinition);
+                        }
                     }
                 }
 
@@ -143,7 +145,7 @@ public class MigrationManagerImpl implements MigrationManager {
 
     }
 
-    private void createTable(TableDefinition tableDefinition, boolean forceCheckSchema) throws Exception {
+    private boolean createTable(TableDefinition tableDefinition, boolean forceCheckSchema) throws Exception {
 
         boolean exists;
         if(!forceCheckSchema){
@@ -159,7 +161,7 @@ public class MigrationManagerImpl implements MigrationManager {
 
         if( exists ){
             logger.info("Not creating table {}, it already exists.", tableDefinition.getTableName());
-            return;
+            return false;
         }
 
         String CQL = tableDefinition.getTableCQL(cassandraFig, TableDefinition.ACTION.CREATE);
@@ -175,6 +177,29 @@ public class MigrationManagerImpl implements MigrationManager {
 
         logger.info("Created table: {} in keyspace {}",
             tableDefinition.getTableName(), tableDefinition.getKeyspace());
+
+        return true;
+    }
+
+    private void createSecondaryIndexes(TableDefinition tableDefinition) throws Exception {
+
+        Map<String,String> cqlMap = tableDefinition.getIndexCQLs(cassandraFig);
+        for (Map.Entry<String,String> entry: cqlMap.entrySet()) {
+            String column = entry.getKey();
+            String CQL = entry.getValue();
+            if (logger.isDebugEnabled()) {
+                logger.debug(CQL);
+            }
+
+            if ( tableDefinition.getKeyspace().equals( cassandraFig.getApplicationKeyspace() )) {
+                dataStaxCluster.getApplicationSession().execute( CQL );
+            } else {
+                dataStaxCluster.getApplicationLocalSession().execute( CQL );
+            }
+
+            logger.info("Created index on table {} column {} in keyspace {}",
+                tableDefinition.getTableName(), column, tableDefinition.getKeyspace());
+        }
 
     }
 

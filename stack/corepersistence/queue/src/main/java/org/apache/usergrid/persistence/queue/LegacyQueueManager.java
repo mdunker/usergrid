@@ -31,9 +31,10 @@ public interface LegacyQueueManager {
      * Different implementations
      */
     enum Implementation {
-        LOCAL,           // local in-memory queue
-        DISTRIBUTED,     // built-in Akka-based queue
-        DISTRIBUTED_SNS; // SNS queue
+        LOCAL,            // local in-memory queue
+        DISTRIBUTED,      // built-in Akka-based queue
+        DISTRIBUTED_SNS,  // SNS queue
+        DISTRIBUTED_CASS; // simple Cassandra queue
     }
 
     /**

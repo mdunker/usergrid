@@ -19,13 +19,13 @@ package org.apache.usergrid.persistence.queue.guice;
 
 
 import com.google.inject.AbstractModule;
+import com.google.inject.Key;
 import com.google.inject.assistedinject.FactoryModuleBuilder;
+import com.google.inject.multibindings.Multibinder;
+import org.apache.usergrid.persistence.core.migration.schema.Migration;
 import org.apache.usergrid.persistence.qakka.QakkaModule;
 import org.apache.usergrid.persistence.queue.*;
-import org.apache.usergrid.persistence.queue.impl.LegacyQueueScopeImpl;
-import org.apache.usergrid.persistence.queue.impl.QakkaQueueManager;
-import org.apache.usergrid.persistence.queue.impl.QueueManagerFactoryImpl;
-import org.apache.usergrid.persistence.queue.impl.SNSQueueManagerImpl;
+import org.apache.usergrid.persistence.queue.impl.*;
 import org.safehaus.guicyfig.GuicyFigModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +48,9 @@ public class QueueModule extends AbstractModule {
         }
         else if ( "DISTRIBUTED".equals( queueManagerType ) ) {
             this.implementation = LegacyQueueManager.Implementation.DISTRIBUTED;
+        }
+        else if ( "DISTRIBUTED_CASS".equals( queueManagerType ) ) {
+            this.implementation = LegacyQueueManager.Implementation.DISTRIBUTED_CASS;
         }
         else {
             this.implementation = LegacyQueueManager.Implementation.LOCAL;
@@ -79,9 +82,19 @@ public class QueueModule extends AbstractModule {
                     .build( LegacyQueueManagerInternalFactory.class ) );
                 break;
 
+            case DISTRIBUTED_CASS:
+                install(new GuicyFigModule(CassQueueFig.class));
+                install( new FactoryModuleBuilder().implement( LegacyQueueManager.class, CassQueueManagerImpl.class )
+                    .build( LegacyQueueManagerInternalFactory.class ) );
+
+                Multibinder<Migration> migrationBinder = Multibinder.newSetBinder( binder(), Migration.class );
+                migrationBinder.addBinding().to( Key.get( CassQueueManagerImpl.class ) );
+
+                break;
+
             default:
                 throw new IllegalArgumentException(
-                    "Queue implemetation value of " + implementation + " not allowed");
+                    "Queue implementation value of " + implementation + " not allowed");
 
         }
 

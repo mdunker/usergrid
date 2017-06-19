@@ -156,6 +156,7 @@ public class MapSerializationImpl implements MapSerialization {
 
         Statement mapEntry;
         Statement mapKey;
+
         if (ttl > 0){
             Using timeToLive = QueryBuilder.ttl(ttl);
 
